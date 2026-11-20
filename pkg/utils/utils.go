@@ -12,6 +12,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/k8snetworkplumbingwg/sriovnet"
+	"github.com/vishvananda/netlink"
+
 	sriovtypes "github.com/k8snetworkplumbingwg/sriov-cni/pkg/types"
 )
 
@@ -138,13 +141,17 @@ func GetVfid(addr, pfName string) (int, error) {
 
 // GetPfName returns PF net device name of a given VF pci address
 func GetPfName(vf string) (string, error) {
-	pfSymLink := filepath.Join(SysBusPci, vf, "physfn", "net")
-	_, err := os.Lstat(pfSymLink)
+	pfPath := filepath.Join(SysBusPci, vf, "physfn")
+	pf, err := os.Readlink(pfPath)
 	if err != nil {
 		return "", err
 	}
 
-	files, err := os.ReadDir(pfSymLink)
+	if device, err := netlink.DevLinkGetDeviceByName("pci", filepath.Base(pf)); err == nil && device.Attrs.Eswitch.Mode == "switchdev" {
+		return sriovnet.GetUplinkRepresentor(vf)
+	}
+
+	files, err := os.ReadDir(filepath.Join(pfPath, "net"))
 	if err != nil {
 		return "", err
 	}
